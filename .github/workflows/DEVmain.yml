@@ -26,6 +26,12 @@ jobs:
           cd workspace
           git clone https://gitlab.com/OrangeFox/sync.git
           cd sync
+          if [ ! -f fox_sync.sh ]; then
+            echo "ERROR: fox_sync.sh not found after cloning OrangeFox sync repo."
+            ls -la
+            exit 1
+          fi
+          chmod +x fox_sync.sh
           ./fox_sync.sh --branch 12.1 --path ../fox_12.1
 
       - name: Clone Device Tree
@@ -36,17 +42,17 @@ jobs:
         run: |
           set -e
           cd ${{ github.workspace }}/workspace/fox_12.1
-          
+
           echo "--> Setting up build environment"
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
-          
+
           echo "--> Lunching for gts9fe"
           lunch omni_gts9fe-eng
-          
+
           echo "--> Cleaning up old builds"
           make clean
-          
+
           echo "--> Starting recovery image build"
           mka recoveryimage -j$(nproc --all)
 
