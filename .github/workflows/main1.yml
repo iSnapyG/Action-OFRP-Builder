@@ -1,0 +1,106 @@
+name: Recovery Build for gts9fe
+
+on:
+  workflow_dispatch:
+    # MODIFIED: Hardcoded your specific device information for easier builds.
+    # You no longer need to fill out this form when running the workflow.
+    inputs:
+      SYNC_URL:
+        description: 'SYNC_URL'
+        default: 'https://gitlab.com/OrangeFox/sync.git'
+      MANIFEST_BRANCH:
+        description: 'MANIFEST_BRANCH'
+        default: '12.1'
+      DEVICE_TREE_URL:
+        description: 'DEVICE_TREE_URL'
+        default: 'https://github.com/iSnapyG/android_device_samsung_gts9fe'
+      DEVICE_TREE_BRANCH:
+        description: 'DEVICE_TREE_BRANCH'
+        default: 'main'
+      DEVICE_PATH:
+        description: 'DEVICE_PATH'
+        default: 'device/samsung/gts9fe'
+      COMMON_TREE_URL:
+        description: 'COMMON_TREE_URL'
+        required: false
+      COMMON_PATH:
+        description: 'COMMON_PATH'
+        required: false
+      DEVICE_NAME:
+        description: 'DEVICE_NAME'
+        default: 'gts9fe'
+      MAKEFILE_NAME:
+        description: 'MAKEFILE_NAME'
+        default: 'omni_gts9fe'
+      BUILD_TARGET:
+        description: 'BUILD_TARGET'
+        default: 'recovery'
+
+jobs:
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    # UPDATED: Using a more modern and efficient build environment.
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Cleanup Runner Environment
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: Initialize workspace
+      run: |
+        mkdir workspace
+        cd workspace
+        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+      id: pwd
+
+    - name: Prepare build dependencies
+      run: |
+        sudo apt install git aria2 -y
+        git clone https://gitlab.com/OrangeFox/misc/scripts
+        cd scripts
+        sudo bash setup/android_build_env.sh
+        sed -i 's/cd -/cd ..\//g' setup/install_android_sdk.sh
+        sudo bash setup/install_android_sdk.sh
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Sync OrangeFox sources
+      run: |
+        cd ${{ steps.pwd.outputs.workspace-folder }}
+        git clone ${{ github.event.inputs.SYNC_URL }}
+        cd sync
+        ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${{ steps.pwd.outputs.workspace-folder }}/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+
+    - name: Clone device tree
+      run: |
+        cd ${{ steps.pwd.outputs.workspace-folder }}/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
+
+    - name: Building recovery
+      run: |
+        cd ${{ steps.pwd.outputs.workspace-folder }}/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && make clean && mka ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
+      continue-on-error: true
+
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ steps.pwd.outputs.workspace-folder }}/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
+          ${{ steps.pwd.outputs.workspace-folder }}/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip
+        name: ${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          Manifest: ${{ github.event.inputs.MANIFEST_BRANCH }}
+          Device: ${{ github.event.inputs.DEVICE_NAME }}
