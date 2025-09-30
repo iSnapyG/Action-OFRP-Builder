@@ -2,7 +2,6 @@ name: Recovery Build for gts9fe
 
 on:
   workflow_dispatch:
-    # MODIFIED: Hardcoded your specific device information for easier builds.
     inputs:
       SYNC_URL:
         description: 'SYNC_URL'
@@ -46,6 +45,14 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    # ARCHITECTURAL FIX: Set up the required Java environment EARLY.
+    # This ensures JAVA_HOME is valid before any other script tries to use it.
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+
     - name: Cleanup Runner Environment
       uses: rokibhasansagar/slimhub_actions@main
 
@@ -82,16 +89,6 @@ jobs:
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 12
-
-    # ARCHITECTURAL FIX: Correct the Java Environment
-    # The 'android_build_env.sh' script sets an invalid JAVA_HOME.
-    # This step uses a standard action to override it and set up a clean,
-    # valid JDK 11 environment, which is required for the build.
-    - name: Set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
 
     - name: Building recovery
       run: |
