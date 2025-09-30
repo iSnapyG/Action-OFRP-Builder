@@ -1,47 +1,41 @@
-# Workflow name
+# Workflow name that will be displayed in the GitHub Actions tab
 name: Build OrangeFox Recovery
 
-# This allows you to manually trigger the build from the Actions tab on GitHub
+# This allows you to manually trigger the build from the Actions tab
 on:
   workflow_dispatch:
 
 jobs:
   build:
+    # Use a modern, stable version of Ubuntu for the build environment
     runs-on: ubuntu-22.04
 
     steps:
+    # Step 1: Check out your device tree repository
+    # This downloads your BoardConfig.mk and other files into the workspace.
     - name: Checkout Device Tree
       uses: actions/checkout@v4
 
-    - name: Set up build environment
+    # Step 2: Free up disk space on the runner
+    # This is the critical fix for the "No space left on device" error.
+    - name: Free Up Disk Space on Runner
+      run: |
+        echo "Initial free space:"
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        echo "Free space after cleanup:"
+        df -h
+
+    # Step 3: Install all required build dependencies
+    - name: Set up build environment dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig python-is-python3 repo bc
 
+    # Step 4: Download the OrangeFox source code using the official script
     - name: Set up OrangeFox source
       run: |
-        mkdir -p ~/fox_12.1
-        cd ~/fox_12.1
-        git clone https://gitlab.com/OrangeFox/sync.git
-        cd sync
-        ./orangefox_sync.sh --branch 12.1 --path ..
-
-    - name: Prepare Device Tree
-      run: |
-        # Create the necessary directory structure
-        mkdir -p ~/fox_12.1/device/samsung
-        # Copy your device tree from this repo into the build environment
-        cp -r $GITHUB_WORKSPACE/* ~/fox_12.1/device/samsung/gts9fe/
-
-    - name: Build OrangeFox
-      run: |
-        cd ~/fox_12.1
-        source build/envsetup.sh
-        lunch omni_gts9fe-userdebug
-        mka recoveryimage
-
-    - name: Upload Recovery Image
-      uses: actions/upload-artifact@v4
-      with:
-        name: OrangeFox-Recovery-gts9fe
-        path: ~/fox_12.1/out/target/product/gts9fe/recovery.img
+        mkdir -p ~/
