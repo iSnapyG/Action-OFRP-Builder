@@ -1,0 +1,57 @@
+name: Build OrangeFox Recovery
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
+            lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev \
+            libwxgtk3.0-gtk3-dev libxml2 libxml2-utils lzop pngcrush rsync \
+            schedtool squashfs-tools xsltproc zip zlib1g-dev
+
+      - name: Clone OrangeFox sources
+        run: |
+          mkdir -p workspace
+          cd workspace
+          git clone https://gitlab.com/OrangeFox/sync.git
+          cd sync
+          ./fox_sync.sh --branch 12.1 --path ../fox_12.1
+
+      - name: Clone Device Tree
+        run: |
+          git clone https://github.com/iSnapyG/android_device_samsung_gts9fe.git ${{ github.workspace }}/workspace/fox_12.1/device/samsung/gts9fe
+
+      - name: Build OrangeFox Recovery
+        run: |
+          set -e
+          cd ${{ github.workspace }}/workspace/fox_12.1
+          
+          echo "--> Setting up build environment"
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          
+          echo "--> Lunching for gts9fe"
+          lunch omni_gts9fe-eng
+          
+          echo "--> Cleaning up old builds"
+          make clean
+          
+          echo "--> Starting recovery image build"
+          mka recoveryimage -j$(nproc --all)
+
+      - name: Upload Recovery Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeFox-Recovery
+          path: ${{ github.workspace }}/workspace/fox_12.1/out/target/product/gts9fe/OrangeFox*.zip
